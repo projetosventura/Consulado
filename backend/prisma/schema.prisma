@@ -1,0 +1,114 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+enum Role {
+  ADMIN
+}
+
+enum RaffleStatus {
+  DRAFT
+  OPEN
+  CLOSED
+  DRAWN
+}
+
+enum TicketStatus {
+  AVAILABLE
+  RESERVED
+  PAID
+}
+
+enum PaymentStatus {
+  PENDING
+  APPROVED
+  REJECTED
+  EXPIRED
+  CANCELLED
+}
+
+model User {
+  id           String   @id @default(uuid())
+  email        String   @unique
+  passwordHash String
+  name         String
+  role         Role     @default(ADMIN)
+  createdAt    DateTime @default(now())
+}
+
+model Raffle {
+  id           String       @id @default(uuid())
+  title        String
+  description  String
+  prize        String
+  imageUrl     String       @default("")
+  ticketPrice  Decimal      @db.Decimal(10, 2)
+  totalNumbers Int
+  status       RaffleStatus @default(OPEN)
+  startsAt     DateTime     @default(now())
+  endsAt       DateTime
+  createdAt    DateTime     @default(now())
+  updatedAt    DateTime     @updatedAt
+  tickets      Ticket[]
+  payments     Payment[]
+  winners      Winner[]
+}
+
+model Ticket {
+  id            String       @id @default(uuid())
+  raffleId      String
+  raffle        Raffle       @relation(fields: [raffleId], references: [id], onDelete: Cascade)
+  number        Int
+  status        TicketStatus @default(AVAILABLE)
+  reservedUntil DateTime?
+  buyerName     String?
+  buyerEmail    String?
+  buyerPhone    String?
+  paymentId     String?
+  payment       Payment?     @relation(fields: [paymentId], references: [id])
+  winner        Winner?
+  createdAt     DateTime     @default(now())
+  updatedAt     DateTime     @updatedAt
+
+  @@unique([raffleId, number])
+  @@index([raffleId, status])
+  @@index([buyerEmail])
+}
+
+model Payment {
+  id                String        @id @default(uuid())
+  raffleId          String
+  raffle            Raffle        @relation(fields: [raffleId], references: [id], onDelete: Cascade)
+  tickets           Ticket[]
+  status            PaymentStatus @default(PENDING)
+  amount            Decimal       @db.Decimal(10, 2)
+  provider          String        @default("mercadopago")
+  providerPaymentId String?
+  pixCopyPaste      String?       @db.Text
+  pixQrCodeBase64   String?       @db.Text
+  payerName         String
+  payerEmail        String
+  payerPhone        String
+  expiresAt         DateTime
+  approvedAt        DateTime?
+  createdAt         DateTime      @default(now())
+  updatedAt         DateTime      @updatedAt
+
+  @@index([status])
+  @@index([providerPaymentId])
+}
+
+model Winner {
+  id       String   @id @default(uuid())
+  raffleId String
+  raffle   Raffle   @relation(fields: [raffleId], references: [id], onDelete: Cascade)
+  ticketId String   @unique
+  ticket   Ticket   @relation(fields: [ticketId], references: [id], onDelete: Cascade)
+  drawnAt  DateTime @default(now())
+  notes    String?
+}

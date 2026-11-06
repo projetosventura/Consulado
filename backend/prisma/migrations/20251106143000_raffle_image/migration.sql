@@ -1,0 +1,1 @@
+ALTER TABLE "Raffle" ADD COLUMN "imageUrl" TEXT NOT NULL DEFAULT '';
