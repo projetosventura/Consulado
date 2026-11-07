@@ -2,7 +2,9 @@ import {
   BadRequestException,
   ConflictException,
   Injectable,
+  Logger,
   NotFoundException,
+  UnauthorizedException,
 } from '@nestjs/common';
 import { PaymentStatus, RaffleStatus, TicketStatus } from '@prisma/client';
 import { PrismaService } from '../prisma/prisma.service';
@@ -10,8 +12,17 @@ import { TicketsService } from '../tickets/tickets.service';
 import { CreateCheckoutDto } from './dto/create-checkout.dto';
 import { MercadoPagoAdapter } from './mercado-pago.adapter';
 
+type WebhookInput = {
+  payload: { data?: { id?: string }; type?: string };
+  query: Record<string, string>;
+  signature?: string;
+  requestId?: string;
+};
+
 @Injectable()
 export class PaymentsService {
+  private readonly logger = new Logger(PaymentsService.name);
+
   constructor(
     private readonly prisma: PrismaService,
     private readonly ticketsService: TicketsService,
@@ -157,17 +168,45 @@ export class PaymentsService {
     return this.approvePayment(id);
   }
 
-  async handleWebhook(payload: { data?: { id?: string }; type?: string }) {
-    const providerPaymentId = payload.data?.id;
-    if (!providerPaymentId || payload.type !== 'payment') {
+  async handleWebhook({ payload, query, signature, requestId }: WebhookInput) {
+    // Sem token não há pagamentos reais no Mercado Pago, então não há o que confirmar.
+    if (!this.mercadoPago.isConfigured()) {
       return { ignored: true };
     }
 
+    const type = payload.type ?? query.type;
+    const providerPaymentId = String(query['data.id'] ?? payload.data?.id ?? '');
+    if (!providerPaymentId || type !== 'payment') {
+      return { ignored: true };
+    }
+
+    if (!this.mercadoPago.verifyWebhookSignature({ signature, requestId, dataId: providerPaymentId })) {
+      this.logger.warn(`Webhook do Mercado Pago com assinatura inválida (pagamento ${providerPaymentId}).`);
+      throw new UnauthorizedException('Assinatura do webhook inválida.');
+    }
+
     const payment = await this.prisma.payment.findFirst({
-      where: { providerPaymentId: String(providerPaymentId) },
+      where: { providerPaymentId },
     });
 
     if (!payment) {
+      return { ignored: true };
+    }
+
+    // Confere no próprio Mercado Pago, não só na notificação recebida.
+    const providerPayment = await this.mercadoPago.getPayment(providerPaymentId);
+
+    if (providerPayment.status !== 'approved') {
+      return { ignored: true };
+    }
+
+    if (providerPayment.externalReference !== payment.id) {
+      this.logger.warn(`Pagamento ${providerPaymentId} com referência divergente do pagamento local ${payment.id}.`);
+      return { ignored: true };
+    }
+
+    if (Math.abs((providerPayment.transactionAmount ?? NaN) - Number(payment.amount)) > 0.009) {
+      this.logger.warn(`Pagamento ${providerPaymentId} com valor divergente do pagamento local ${payment.id}.`);
       return { ignored: true };
     }
 

@@ -1,4 +1,4 @@
-import { Body, Controller, Get, Param, Post, UseGuards } from '@nestjs/common';
+import { Body, Controller, Get, Headers, Param, Post, Query, UseGuards } from '@nestjs/common';
 import { JwtAuthGuard } from '../auth/jwt-auth.guard';
 import { CreateCheckoutDto } from './dto/create-checkout.dto';
 import { PaymentsService } from './payments.service';
@@ -18,8 +18,13 @@ export class PaymentsController {
   }
 
   @Post('webhook')
-  webhook(@Body() payload: { data?: { id?: string }; type?: string }) {
-    return this.paymentsService.handleWebhook(payload);
+  webhook(
+    @Body() payload: { data?: { id?: string }; type?: string },
+    @Query() query: Record<string, string>,
+    @Headers('x-signature') signature?: string,
+    @Headers('x-request-id') requestId?: string,
+  ) {
+    return this.paymentsService.handleWebhook({ payload, query, signature, requestId });
   }
 
   @Post(':id/sandbox-confirm')
