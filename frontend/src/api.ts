@@ -37,8 +37,8 @@ export const api = {
     buyerPhone: string;
   }) => request<Payment>('/payments/checkout', { method: 'POST', body: JSON.stringify(body) }),
   getPayment: (id: string) => request<Payment>(`/payments/${id}`),
-  sandboxConfirm: (id: string) =>
-    request<Payment>(`/payments/${id}/sandbox-confirm`, { method: 'POST' }),
+  sandboxConfirm: (id: string, token: string) =>
+    request<Payment>(`/payments/${id}/sandbox-confirm`, { method: 'POST' }, token),
   login: (email: string, password: string) =>
     request<AdminSession>('/auth/login', {
       method: 'POST',

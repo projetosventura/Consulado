@@ -28,6 +28,7 @@ export class PaymentsController {
   }
 
   @Post(':id/sandbox-confirm')
+  @UseGuards(JwtAuthGuard)
   sandboxConfirm(@Param('id') id: string) {
     return this.paymentsService.sandboxConfirm(id);
   }

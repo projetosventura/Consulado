@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react';
 import { Link, useParams } from 'react-router-dom';
 import { QRCodeSVG } from 'qrcode.react';
 import { api } from '../api';
+import { getToken } from '../auth';
 import { formatMoney, statusLabel } from '../lib/format';
 import type { Payment } from '../types';
 
@@ -50,11 +51,12 @@ export function CheckoutPage() {
   }
 
   async function confirmSandbox() {
-    if (!payment) {
+    const token = getToken();
+    if (!payment || !token) {
       return;
     }
     try {
-      setPayment(await api.sandboxConfirm(payment.id));
+      setPayment(await api.sandboxConfirm(payment.id, token));
     } catch (err) {
       setError((err as Error).message);
     }
@@ -88,7 +90,7 @@ export function CheckoutPage() {
             <button className="ghost" type="button" onClick={() => void copyPix()}>
               {copied ? 'Código copiado' : 'Copiar código PIX'}
             </button>
-            {payment.sandbox && (
+            {payment.sandbox && getToken() && (
               <button className="button" type="button" onClick={() => void confirmSandbox()}>
                 Confirmar pagamento de teste
               </button>
